@@ -37,6 +37,7 @@ rr --token "your_token" auth
 - `--cache` - Enable response caching
 - `--cache-file <PATH>` - Cache file path (default: `./rr_cache.json`)
 - `--json` - Output raw JSON instead of pretty format
+- `-v, --verbose` - Enable debug output (prints HTTP requests/responses)
 
 ## Examples
 
@@ -58,6 +59,10 @@ rr tag_list
 
 # With caching enabled
 rr --cache list --location new
+
+# Debug mode (prints HTTP requests/responses, saves to debug_cache.json)
+rr -v auth
+rr --verbose list --location new
 ```
 
 ## Project Structure
@@ -78,6 +83,25 @@ src/
 - Internal limit: 20 API requests per session (`MAX_REQUESTS_PER_SESSION`)
 - Readwise API limit: 20 requests/minute (50 for create/update)
 - `tag_list` fetches all pages automatically within the internal limit
+
+## Debug Cache
+
+When `--verbose` mode is enabled, all HTTP requests and responses are saved to `debug_cache.json`:
+
+```json
+{
+  "entries": [
+    {
+      "timestamp": "2024-01-04T12:00:00Z",
+      "method": "GET",
+      "url": "https://readwise.io/api/v3/list/",
+      "request_body": null,
+      "status": 200,
+      "response_body": { ... }
+    }
+  ]
+}
+```
 
 ## API Reference
 

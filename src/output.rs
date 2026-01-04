@@ -50,10 +50,13 @@ fn format_document(doc: &Document) -> String {
     let title = doc.title.as_deref().unwrap_or("(no title)");
     let mut output = format!("Document: {}\n", title);
     output.push_str(&format!("  ID: {}\n", doc.id));
-    output.push_str(&format!("  URL: {}\n", doc.url));
-    output.push_str(&format!("  Location: {}\n", doc.location));
-    output.push_str(&format!("  Category: {}\n", doc.category));
 
+    if let Some(location) = &doc.location {
+        output.push_str(&format!("  Location: {}\n", location));
+    }
+    if let Some(category) = &doc.category {
+        output.push_str(&format!("  Category: {}\n", category));
+    }
     if let Some(author) = &doc.author {
         output.push_str(&format!("  Author: {}\n", author));
     }
@@ -63,14 +66,6 @@ fn format_document(doc: &Document) -> String {
         if !tags_str.is_empty() {
             output.push_str(&format!("  Tags: {}\n", tags_str));
         }
-    }
-
-    if let Some(updated) = &doc.updated_at {
-        output.push_str(&format!("  Updated: {}\n", updated));
-    }
-
-    if let Some(progress) = doc.reading_progress {
-        output.push_str(&format!("  Progress: {:.0}%\n", progress * 100.0));
     }
 
     output

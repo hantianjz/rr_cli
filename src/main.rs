@@ -30,7 +30,7 @@ async fn run(args: Args) -> Result<(), RrCliError> {
         )
     })?;
 
-    let mut client = ReaderClient::new(&token)?;
+    let mut client = ReaderClient::new(&token, args.verbose)?;
     let mut cache = if args.cache {
         Some(Cache::new(&args.cache_file))
     } else {
@@ -58,6 +58,9 @@ async fn run(args: Args) -> Result<(), RrCliError> {
     if let Some(c) = cache {
         c.save()?;
     }
+
+    // Save debug cache if verbose mode
+    client.save_debug_cache()?;
 
     result
 }

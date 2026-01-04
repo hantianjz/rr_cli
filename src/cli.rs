@@ -10,7 +10,7 @@ pub struct Args {
     pub token: Option<String>,
 
     /// Enable caching of API responses
-    #[arg(long, global = true, default_value_t = false)]
+    #[arg(long, global = true, default_value_t = true)]
     pub cache: bool,
 
     /// Cache file path
@@ -20,6 +20,10 @@ pub struct Args {
     /// Output raw JSON instead of pretty format
     #[arg(long, global = true, default_value_t = false)]
     pub json: bool,
+
+    /// Enable verbose debug output (prints HTTP requests/responses)
+    #[arg(short, long, global = true, default_value_t = false)]
+    pub verbose: bool,
 
     #[command(subcommand)]
     pub command: Command,

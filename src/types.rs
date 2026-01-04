@@ -87,16 +87,18 @@ pub struct ListDocumentsParams {
 
 // === Response Types ===
 
+/// Document response - all fields optional except id to handle API variations
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Document {
     pub id: String,
-    pub url: String,
+    #[serde(default)]
+    pub url: Option<String>,
     pub source_url: Option<String>,
     pub title: Option<String>,
     pub author: Option<String>,
     pub source: Option<String>,
-    pub category: String,
-    pub location: String,
+    pub category: Option<String>,
+    pub location: Option<String>,
     pub tags: Option<serde_json::Value>,
     pub site_name: Option<String>,
     pub word_count: Option<u32>,
@@ -113,6 +115,9 @@ pub struct Document {
     pub last_opened_at: Option<String>,
     pub saved_at: Option<String>,
     pub last_moved_at: Option<String>,
+    // Additional fields that may appear in API responses
+    #[serde(flatten)]
+    pub extra: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -131,7 +136,7 @@ pub struct CreateDocumentResponse {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Tag {
-    pub id: String,
+    pub key: String,
     pub name: String,
 }
 
