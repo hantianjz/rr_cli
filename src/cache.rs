@@ -1,14 +1,14 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::RrCliError;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CacheEntry {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: u64,
     pub endpoint: String,
     pub params: serde_json::Value,
     pub response: serde_json::Value,
@@ -60,8 +60,13 @@ impl Cache {
         params: serde_json::Value,
         response: serde_json::Value,
     ) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
         let entry = CacheEntry {
-            timestamp: Utc::now(),
+            timestamp,
             endpoint: endpoint.to_string(),
             params,
             response,

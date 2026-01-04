@@ -1,8 +1,8 @@
-use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::RrCliError;
 use crate::types::*;
@@ -46,7 +46,10 @@ impl DebugCache {
         response_body: Option<&str>,
     ) {
         let entry = DebugEntry {
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default(),
             method: method.to_string(),
             url: url.to_string(),
             request_body: request_body.and_then(|b| serde_json::from_str(b).ok()),
