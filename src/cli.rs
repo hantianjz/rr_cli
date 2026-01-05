@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use std::fmt;
 
 #[derive(Parser, Debug)]
 #[command(name = "rr")]
@@ -200,13 +201,13 @@ pub enum Location {
     Feed,
 }
 
-impl Location {
-    pub fn as_str(&self) -> &'static str {
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Location::New => "new",
-            Location::Later => "later",
-            Location::Archive => "archive",
-            Location::Feed => "feed",
+            Location::New => write!(f, "new"),
+            Location::Later => write!(f, "later"),
+            Location::Archive => write!(f, "archive"),
+            Location::Feed => write!(f, "feed"),
         }
     }
 }
@@ -220,14 +221,14 @@ pub enum ListLocation {
     Feed,
 }
 
-impl ListLocation {
-    pub fn as_str(&self) -> &'static str {
+impl fmt::Display for ListLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ListLocation::New => "new",
-            ListLocation::Later => "later",
-            ListLocation::Shortlist => "shortlist",
-            ListLocation::Archive => "archive",
-            ListLocation::Feed => "feed",
+            ListLocation::New => write!(f, "new"),
+            ListLocation::Later => write!(f, "later"),
+            ListLocation::Shortlist => write!(f, "shortlist"),
+            ListLocation::Archive => write!(f, "archive"),
+            ListLocation::Feed => write!(f, "feed"),
         }
     }
 }
@@ -245,18 +246,18 @@ pub enum Category {
     Video,
 }
 
-impl Category {
-    pub fn as_str(&self) -> &'static str {
+impl fmt::Display for Category {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Category::Article => "article",
-            Category::Email => "email",
-            Category::Rss => "rss",
-            Category::Highlight => "highlight",
-            Category::Note => "note",
-            Category::Pdf => "pdf",
-            Category::Epub => "epub",
-            Category::Tweet => "tweet",
-            Category::Video => "video",
+            Category::Article => write!(f, "article"),
+            Category::Email => write!(f, "email"),
+            Category::Rss => write!(f, "rss"),
+            Category::Highlight => write!(f, "highlight"),
+            Category::Note => write!(f, "note"),
+            Category::Pdf => write!(f, "pdf"),
+            Category::Epub => write!(f, "epub"),
+            Category::Tweet => write!(f, "tweet"),
+            Category::Video => write!(f, "video"),
         }
     }
 }

@@ -281,43 +281,54 @@ impl ReaderClient {
         .await
     }
 
+    fn build_list_query_params(params: &ListDocumentsParams) -> Vec<(&'static str, String)> {
+        let mut query = vec![];
+
+        if let Some(id) = &params.id {
+            query.push(("id", id.clone()));
+        }
+        if let Some(updated_after) = &params.updated_after {
+            query.push(("updatedAfter", updated_after.clone()));
+        }
+        if let Some(location) = &params.location {
+            query.push(("location", location.clone()));
+        }
+        if let Some(category) = &params.category {
+            query.push(("category", category.clone()));
+        }
+        if let Some(tag) = &params.tag {
+            query.push(("tag", tag.clone()));
+        }
+        if let Some(cursor) = &params.page_cursor {
+            query.push(("pageCursor", cursor.clone()));
+        }
+        if let Some(with_html) = params.with_html_content {
+            query.push(("withHtmlContent", with_html.to_string()));
+        }
+        if let Some(with_raw) = params.with_raw_source_url {
+            query.push(("withRawSourceUrl", with_raw.to_string()));
+        }
+
+        query
+    }
+
     pub async fn list_documents(
         &mut self,
         params: &ListDocumentsParams,
     ) -> Result<ListDocumentsResponse> {
         let url = format!("{}/v3/list/", BASE_URL);
-        let mut query_params = vec![];
+        let query_params = Self::build_list_query_params(params);
 
-        // Build query string for logging
-        if let Some(id) = &params.id {
-            query_params.push(format!("id={}", id));
-        }
-        if let Some(updated_after) = &params.updated_after {
-            query_params.push(format!("updatedAfter={}", updated_after));
-        }
-        if let Some(location) = &params.location {
-            query_params.push(format!("location={}", location));
-        }
-        if let Some(category) = &params.category {
-            query_params.push(format!("category={}", category));
-        }
-        if let Some(tag) = &params.tag {
-            query_params.push(format!("tag={}", tag));
-        }
-        if let Some(cursor) = &params.page_cursor {
-            query_params.push(format!("pageCursor={}", cursor));
-        }
-        if let Some(with_html) = params.with_html_content {
-            query_params.push(format!("withHtmlContent={}", with_html));
-        }
-        if let Some(with_raw) = params.with_raw_source_url {
-            query_params.push(format!("withRawSourceUrl={}", with_raw));
-        }
-
+        // Build full URL for logging
         let full_url = if query_params.is_empty() {
             url.clone()
         } else {
-            format!("{}?{}", url, query_params.join("&"))
+            let query_string = query_params
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("&");
+            format!("{}?{}", url, query_string)
         };
 
         self.execute_request(
@@ -325,29 +336,8 @@ impl ReaderClient {
             &full_url,
             |client| {
                 let mut request = client.get(&url);
-                if let Some(id) = &params.id {
-                    request = request.query(&[("id", id)]);
-                }
-                if let Some(updated_after) = &params.updated_after {
-                    request = request.query(&[("updatedAfter", updated_after)]);
-                }
-                if let Some(location) = &params.location {
-                    request = request.query(&[("location", location)]);
-                }
-                if let Some(category) = &params.category {
-                    request = request.query(&[("category", category)]);
-                }
-                if let Some(tag) = &params.tag {
-                    request = request.query(&[("tag", tag)]);
-                }
-                if let Some(cursor) = &params.page_cursor {
-                    request = request.query(&[("pageCursor", cursor)]);
-                }
-                if let Some(with_html) = params.with_html_content {
-                    request = request.query(&[("withHtmlContent", with_html.to_string())]);
-                }
-                if let Some(with_raw) = params.with_raw_source_url {
-                    request = request.query(&[("withRawSourceUrl", with_raw.to_string())]);
+                for (key, value) in &query_params {
+                    request = request.query(&[(key, value)]);
                 }
                 (request, None)
             },

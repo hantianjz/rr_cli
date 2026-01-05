@@ -131,6 +131,49 @@ async fn run(args: Args) -> Result<()> {
     result
 }
 
+async fn fetch_with_cache<T, F, Fut>(
+    cache: &mut Option<Cache>,
+    cache_key: &str,
+    endpoint: &str,
+    params: serde_json::Value,
+    fetch_fn: F,
+) -> Result<T>
+where
+    T: serde::de::DeserializeOwned + serde::Serialize,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
+    // Try cache first
+    if let Some(c) = cache.as_ref() {
+        if let Some(entry) = c.get(cache_key) {
+            if let Ok(cached) = serde_json::from_value::<T>(entry.response.clone()) {
+                return Ok(cached);
+            }
+        }
+    }
+
+    // Cache miss or corrupted - fetch from API
+    let result = fetch_fn().await?;
+
+    // Update cache
+    if let Some(c) = cache.as_mut() {
+        let response_json = serde_json::to_value(&result)?;
+        c.set(cache_key, endpoint, params, response_json);
+    }
+
+    Ok(result)
+}
+
+fn print_tag_not_found_warning(tag_name: &str, tags: &[Tag]) {
+    eprintln!("Warning: Tag '{}' not found. Available tags:", tag_name);
+    for tag in tags.iter().take(10) {
+        eprintln!("  - {}", tag.name);
+    }
+    if tags.len() > 10 {
+        eprintln!("  ... and {} more", tags.len() - 10);
+    }
+}
+
 async fn resolve_tag_key(
     client: &mut ReaderClient,
     cache: &mut Option<Cache>,
@@ -138,35 +181,15 @@ async fn resolve_tag_key(
 ) -> Result<Option<String>> {
     let cache_key = "tag_list:all";
 
-    // Try to get tags from cache first
-    let tags: Vec<Tag> = if let Some(c) = cache.as_ref() {
-        if let Some(entry) = c.get(cache_key) {
-            if let Ok(cached_tags) = serde_json::from_value::<Vec<Tag>>(entry.response.clone()) {
-                cached_tags
-            } else {
-                // Cache corrupted, fetch fresh
-                let fresh_tags = client.list_all_tags().await?;
-                // Update cache
-                if let Some(c) = cache.as_mut() {
-                    let response_json = serde_json::to_value(&fresh_tags)?;
-                    c.set(cache_key, "tag_list", serde_json::json!({}), response_json);
-                }
-                fresh_tags
-            }
-        } else {
-            // Cache miss, fetch from API
-            let fresh_tags = client.list_all_tags().await?;
-            // Update cache
-            if let Some(c) = cache.as_mut() {
-                let response_json = serde_json::to_value(&fresh_tags)?;
-                c.set(cache_key, "tag_list", serde_json::json!({}), response_json);
-            }
-            fresh_tags
-        }
-    } else {
-        // No cache enabled, fetch from API
-        client.list_all_tags().await?
-    };
+    // Fetch tags with caching
+    let tags = fetch_with_cache(
+        cache,
+        cache_key,
+        "tag_list",
+        serde_json::json!({}),
+        || async { client.list_all_tags().await },
+    )
+    .await?;
 
     // Look up tag key by name (case-insensitive)
     let tag_key = tags
@@ -175,13 +198,7 @@ async fn resolve_tag_key(
         .map(|tag| tag.key.clone());
 
     if tag_key.is_none() {
-        eprintln!("Warning: Tag '{}' not found. Available tags:", tag_name);
-        for tag in tags.iter().take(10) {
-            eprintln!("  - {}", tag.name);
-        }
-        if tags.len() > 10 {
-            eprintln!("  ... and {} more", tags.len() - 10);
-        }
+        print_tag_not_found_warning(tag_name, &tags);
     }
 
     Ok(tag_key)
@@ -212,8 +229,8 @@ async fn handle_create(
         summary: args.summary,
         published_date: args.published_date,
         image_url: args.image_url,
-        location: args.location.map(|l| l.as_str().to_string()),
-        category: args.category.map(|c| c.as_str().to_string()),
+        location: args.location.map(|l| l.to_string()),
+        category: args.category.map(|c| c.to_string()),
         saved_using: args.saved_using,
         tags: args.tags,
         notes: args.notes,
@@ -222,6 +239,42 @@ async fn handle_create(
     let response = client.create_document(request).await?;
     println!("{}", output::format_create_response(&response, json_output));
     Ok(())
+}
+
+fn build_list_cache_key(params: &ListDocumentsParams, page_num: usize) -> String {
+    format!(
+        "list:{}:{}:{}:{}:page:{}",
+        params.location.as_deref().unwrap_or("all"),
+        params.category.as_deref().unwrap_or("all"),
+        params.tag.as_deref().unwrap_or("all"),
+        params.id.as_deref().unwrap_or("all"),
+        page_num
+    )
+}
+
+fn prompt_for_next_page() -> Result<bool> {
+    eprint!("Press Enter for next page (or 'q' to quit): ");
+    io::stderr().flush().ok();
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    let input = input.trim().to_lowercase();
+    Ok(input != "q" && input != "quit")
+}
+
+fn print_page_results(response: &ListDocumentsResponse, page_num: usize, json_output: bool) {
+    if json_output {
+        println!("{}", serde_json::to_string(&response).unwrap_or_default());
+    } else {
+        println!(
+            "=== Page {} (showing {}/{} total) ===",
+            page_num,
+            response.results.len(),
+            response.count
+        );
+        println!("{}", output::format_list_response(response, false));
+    }
 }
 
 async fn handle_list(
@@ -240,8 +293,8 @@ async fn handle_list(
     let mut params = ListDocumentsParams {
         id: args.id,
         updated_after: args.updated_after,
-        location: args.location.map(|l| l.as_str().to_string()),
-        category: args.category.map(|c| c.as_str().to_string()),
+        location: args.location.map(|l| l.to_string()),
+        category: args.category.map(|c| c.to_string()),
         tag: tag_key,
         page_cursor: args.cursor,
         with_html_content: args.with_html_content,
@@ -251,91 +304,39 @@ async fn handle_list(
     let mut page_num = 1;
 
     loop {
-        // Generate cache key for this page
-        let cache_key = format!(
-            "list:{}:{}:{}:{}:page:{}",
-            params.location.as_deref().unwrap_or("all"),
-            params.category.as_deref().unwrap_or("all"),
-            params.tag.as_deref().unwrap_or("all"),
-            params.id.as_deref().unwrap_or("all"),
-            page_num
-        );
+        // Fetch page with caching
+        let cache_key = build_list_cache_key(&params, page_num);
+        let params_json = serde_json::json!({
+            "location": params.location,
+            "category": params.category,
+            "tag": params.tag,
+            "id": params.id,
+            "page": page_num
+        });
 
-        // Try to get from cache first
-        let response = if let Some(c) = cache.as_ref() {
-            if let Some(entry) = c.get(&cache_key) {
-                // Cache hit - deserialize the response
-                serde_json::from_value::<ListDocumentsResponse>(entry.response.clone()).ok()
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // If not in cache, fetch from API
-        let response = if let Some(cached_response) = response {
-            cached_response
-        } else {
-            let api_response = client.list_documents(&params).await?;
-
-            // Store in cache
-            if let Some(c) = cache.as_mut() {
-                let params_json = serde_json::json!({
-                    "location": params.location,
-                    "category": params.category,
-                    "tag": params.tag,
-                    "id": params.id,
-                    "page": page_num
-                });
-                let response_json = serde_json::to_value(&api_response)?;
-                c.set(&cache_key, "list", params_json, response_json);
-            }
-
-            api_response
-        };
+        let response = fetch_with_cache(cache, &cache_key, "list", params_json, || async {
+            client.list_documents(&params).await
+        })
+        .await?;
 
         // Print page results
-        if json_output {
-            println!("{}", serde_json::to_string(&response).unwrap_or_default());
-        } else {
-            println!(
-                "=== Page {} (showing {}/{} total) ===",
-                page_num,
-                response.results.len(),
-                response.count
-            );
-            println!("{}", output::format_list_response(&response, false));
-        }
+        print_page_results(&response, page_num, json_output);
 
-        // Check if there's a next page
+        // Handle pagination
         match response.next_page_cursor {
             Some(cursor) => {
                 if args.all {
-                    // Auto-fetch next page
                     params.page_cursor = Some(cursor);
                     page_num += 1;
                 } else {
-                    // Wait for user input
-                    eprint!("Press Enter for next page (or 'q' to quit): ");
-                    io::stderr().flush().ok();
-
-                    let mut input = String::new();
-                    if io::stdin().read_line(&mut input).is_err() {
+                    if !prompt_for_next_page()? {
                         break;
                     }
-
-                    let input = input.trim().to_lowercase();
-                    if input == "q" || input == "quit" {
-                        break;
-                    }
-
                     params.page_cursor = Some(cursor);
                     page_num += 1;
                 }
             }
             None => {
-                // No more pages
                 if !json_output {
                     eprintln!("--- End of results ---");
                 }
@@ -359,8 +360,8 @@ async fn handle_update(
         published_date: args.published_date,
         image_url: args.image_url,
         seen: args.seen,
-        location: args.location.map(|l| l.as_str().to_string()),
-        category: args.category.map(|c| c.as_str().to_string()),
+        location: args.location.map(|l| l.to_string()),
+        category: args.category.map(|c| c.to_string()),
         tags: args.tags,
     };
 
@@ -382,23 +383,15 @@ async fn handle_tag_list(
 ) -> Result<()> {
     let cache_key = "tag_list:all";
 
-    // Check cache first - now expects Vec<Tag>
-    if let Some(c) = cache.as_ref() {
-        if let Some(entry) = c.get(cache_key) {
-            if let Ok(tags) = serde_json::from_value::<Vec<Tag>>(entry.response.clone()) {
-                println!("{}", output::format_tags_response(&tags, json_output));
-                return Ok(());
-            }
-        }
-    }
-
-    let tags = client.list_all_tags().await?;
-
-    // Store in cache with full Tag structures
-    if let Some(c) = cache.as_mut() {
-        let response_json = serde_json::to_value(&tags)?;
-        c.set(cache_key, "tag_list", serde_json::json!({}), response_json);
-    }
+    // Fetch tags with caching
+    let tags = fetch_with_cache(
+        cache,
+        cache_key,
+        "tag_list",
+        serde_json::json!({}),
+        || async { client.list_all_tags().await },
+    )
+    .await?;
 
     println!("{}", output::format_tags_response(&tags, json_output));
     Ok(())
