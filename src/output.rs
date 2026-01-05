@@ -108,4 +108,3 @@ pub fn format_tags_response(tags: &[String], json_output: bool) -> String {
         tags.join("\n")
     }
 }
-

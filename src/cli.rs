@@ -138,6 +138,10 @@ pub struct ListArgs {
     /// Include raw source URL in response
     #[arg(long)]
     pub with_raw_source_url: Option<bool>,
+
+    /// Fetch all pages without waiting for user input
+    #[arg(long, short)]
+    pub all: bool,
 }
 
 #[derive(clap::Args, Debug)]

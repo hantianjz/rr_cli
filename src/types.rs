@@ -147,4 +147,3 @@ pub struct ListTagsResponse {
     pub next_page_cursor: Option<String>,
     pub results: Vec<Tag>,
 }
-

@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::error::RrCliError;
+use anyhow::Result;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CacheEntry {
@@ -43,7 +43,7 @@ impl Cache {
         serde_json::from_str(&content).ok()
     }
 
-    pub fn save(&self) -> Result<(), RrCliError> {
+    pub fn save(&self) -> Result<()> {
         let content = serde_json::to_string_pretty(&self.data)?;
         fs::write(&self.file_path, content)?;
         Ok(())
@@ -74,8 +74,17 @@ impl Cache {
         self.data.entries.insert(key.to_string(), entry);
     }
 
-    pub fn generate_key(endpoint: &str, params: &serde_json::Value) -> String {
-        let params_str = serde_json::to_string(params).unwrap_or_default();
-        format!("{}:{}", endpoint, params_str)
+    /// Try to save the cache if the file exists
+    /// Used by signal handlers to save cache on interrupt/panic
+    pub fn save_if_exists(file_path: &str) -> Result<()> {
+        let path = Path::new(file_path);
+        if !path.exists() {
+            // No cache file exists yet, nothing to save
+            return Ok(());
+        }
+
+        // Load and save the cache to persist any in-memory changes
+        let cache = Self::new(file_path);
+        cache.save()
     }
 }
