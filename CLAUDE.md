@@ -29,7 +29,7 @@ rr --token "your_token" auth
 | `rr list` | List documents |
 | `rr update <ID>` | Update a document |
 | `rr delete <ID>` | Delete a document |
-| `rr tag_list` | List all tags |
+| `rr tag-list` | List all tags |
 
 ## Global Options
 
@@ -55,7 +55,7 @@ rr update abc123 --location archive --seen true
 rr delete abc123
 
 # List all tags
-rr tag_list
+rr tag-list
 
 # With caching enabled
 rr --cache list --location new
@@ -71,18 +71,23 @@ rr --verbose list --location new
 src/
 ├── main.rs      # Entry point, command dispatch
 ├── cli.rs       # Clap argument definitions
-├── client.rs    # HTTP client with auth
+├── client.rs    # HTTP client with auth and retry logic
 ├── types.rs     # Request/response structs
 ├── cache.rs     # JSON file caching
-├── output.rs    # Output formatting
-└── error.rs     # Custom error types
+└── output.rs    # Output formatting
 ```
 
 ## Rate Limiting
 
-- Internal limit: 20 API requests per session (`MAX_REQUESTS_PER_SESSION`)
-- Readwise API limit: 20 requests/minute (50 for create/update)
-- `tag_list` fetches all pages automatically within the internal limit
+The tool handles rate limiting dynamically based on API responses:
+
+- **No internal rate limiting**: No artificial request limits - the tool makes as many requests as needed
+- **Automatic retry on 429**: When the Readwise API returns a 429 (Too Many Requests) error:
+  1. Parses the wait time from the error message (e.g., "Expected available in 9 seconds")
+  2. Displays a countdown timer on the same line showing remaining wait time
+  3. Automatically retries the request after the wait period completes
+- **Readwise API limits**: 20 requests/minute for most operations (50 for create/update)
+- **Pagination**: Commands like `tag-list` and `list --all` fetch all pages automatically, handling rate limits transparently
 
 ## Debug Cache
 

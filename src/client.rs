@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use crate::types::*;
 
@@ -238,7 +238,7 @@ impl ReaderClient {
             } else {
                 let text = response.text().await.unwrap_or_default();
                 self.log_response(method, url, request_body_ref, status, &text);
-                return Err(anyhow!("API request failed: HTTP {}: {}", status, text));
+                anyhow::bail!("API request failed: HTTP {}: {}", status, text);
             }
         }
     }
@@ -390,7 +390,7 @@ impl ReaderClient {
         .await
     }
 
-    pub async fn list_all_tags(&mut self) -> Result<Vec<String>> {
+    pub async fn list_all_tags(&mut self) -> Result<Vec<Tag>> {
         let mut all_tags = Vec::new();
         let mut cursor: Option<String> = None;
 
@@ -419,7 +419,7 @@ impl ReaderClient {
                 .await?;
 
             for tag in result.results {
-                all_tags.push(tag.name);
+                all_tags.push(tag);
             }
 
             match result.next_page_cursor {

@@ -101,10 +101,13 @@ pub fn format_delete_response(id: &str, json_output: bool) -> String {
     }
 }
 
-pub fn format_tags_response(tags: &[String], json_output: bool) -> String {
+pub fn format_tags_response(tags: &[Tag], json_output: bool) -> String {
     if json_output {
         serde_json::to_string(tags).unwrap_or_default()
     } else {
-        tags.join("\n")
+        tags.iter()
+            .map(|tag| tag.name.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

@@ -131,6 +131,62 @@ async fn run(args: Args) -> Result<()> {
     result
 }
 
+async fn resolve_tag_key(
+    client: &mut ReaderClient,
+    cache: &mut Option<Cache>,
+    tag_name: &str,
+) -> Result<Option<String>> {
+    let cache_key = "tag_list:all";
+
+    // Try to get tags from cache first
+    let tags: Vec<Tag> = if let Some(c) = cache.as_ref() {
+        if let Some(entry) = c.get(cache_key) {
+            if let Ok(cached_tags) = serde_json::from_value::<Vec<Tag>>(entry.response.clone()) {
+                cached_tags
+            } else {
+                // Cache corrupted, fetch fresh
+                let fresh_tags = client.list_all_tags().await?;
+                // Update cache
+                if let Some(c) = cache.as_mut() {
+                    let response_json = serde_json::to_value(&fresh_tags)?;
+                    c.set(cache_key, "tag_list", serde_json::json!({}), response_json);
+                }
+                fresh_tags
+            }
+        } else {
+            // Cache miss, fetch from API
+            let fresh_tags = client.list_all_tags().await?;
+            // Update cache
+            if let Some(c) = cache.as_mut() {
+                let response_json = serde_json::to_value(&fresh_tags)?;
+                c.set(cache_key, "tag_list", serde_json::json!({}), response_json);
+            }
+            fresh_tags
+        }
+    } else {
+        // No cache enabled, fetch from API
+        client.list_all_tags().await?
+    };
+
+    // Look up tag key by name (case-insensitive)
+    let tag_key = tags
+        .iter()
+        .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))
+        .map(|tag| tag.key.clone());
+
+    if tag_key.is_none() {
+        eprintln!("Warning: Tag '{}' not found. Available tags:", tag_name);
+        for tag in tags.iter().take(10) {
+            eprintln!("  - {}", tag.name);
+        }
+        if tags.len() > 10 {
+            eprintln!("  ... and {} more", tags.len() - 10);
+        }
+    }
+
+    Ok(tag_key)
+}
+
 async fn handle_auth(client: &mut ReaderClient, json_output: bool) -> Result<()> {
     let is_valid = client.check_auth().await?;
     let output = if is_valid {
@@ -174,12 +230,19 @@ async fn handle_list(
     json_output: bool,
     cache: &mut Option<Cache>,
 ) -> Result<()> {
+    // Resolve tag name to tag key if --tag was provided
+    let tag_key = if let Some(tag_name) = &args.tag {
+        resolve_tag_key(client, cache, tag_name).await?
+    } else {
+        None
+    };
+
     let mut params = ListDocumentsParams {
         id: args.id,
         updated_after: args.updated_after,
         location: args.location.map(|l| l.as_str().to_string()),
         category: args.category.map(|c| c.as_str().to_string()),
-        tag: args.tag,
+        tag: tag_key,
         page_cursor: args.cursor,
         with_html_content: args.with_html_content,
         with_raw_source_url: args.with_raw_source_url,
@@ -319,10 +382,10 @@ async fn handle_tag_list(
 ) -> Result<()> {
     let cache_key = "tag_list:all";
 
-    // Check cache first
+    // Check cache first - now expects Vec<Tag>
     if let Some(c) = cache.as_ref() {
         if let Some(entry) = c.get(cache_key) {
-            if let Ok(tags) = serde_json::from_value::<Vec<String>>(entry.response.clone()) {
+            if let Ok(tags) = serde_json::from_value::<Vec<Tag>>(entry.response.clone()) {
                 println!("{}", output::format_tags_response(&tags, json_output));
                 return Ok(());
             }
@@ -331,7 +394,7 @@ async fn handle_tag_list(
 
     let tags = client.list_all_tags().await?;
 
-    // Store in cache
+    // Store in cache with full Tag structures
     if let Some(c) = cache.as_mut() {
         let response_json = serde_json::to_value(&tags)?;
         c.set(cache_key, "tag_list", serde_json::json!({}), response_json);
